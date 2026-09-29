@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+    <head>
+        <title>Check Runs - CBA Utils</title>
+        <meta charset="UTF-8" />
+        <meta http-equiv="Content-Security-Policy">
+        <link rel="stylesheet" href="./style.css">
+    </head>
+    <body>
+        <div class="container">
+            <h1>
+                Check Runs
+            </h1>
+
+            <form>
+                <fieldset>
+                    <legend>Upload Files</legend>
+                    <input 
+                        type="text"
+                        id="uploadedRegisterFilePath"
+                        value="Please select a file..."
+                        readonly
+                        disabled
+                        name="uploadedRegisterFilePath"
+                    />
+
+                    <input 
+                        type="text"
+                        id="uploadedRunFilePath"
+                        value="Please select a file..."
+                        readonly
+                        disabled
+                        name="uploadedRunFilePath"
+                    />
+
+                    <input 
+                        type="button"
+                        id="registerFileUpload"
+                        value="Choose Register"
+                    />
+
+                    <input 
+                        type="button"
+                        id="runFileUpload"
+                        value="Choose Run"
+                    />
+                </fieldset>
+
+                <input 
+                    type="button"
+                    value="Start Process"
+                    id="submitBtn"
+                />
+                <!--
+                <button id="submitBtn">
+                    Process File
+                </button>
+                -->
+                
+                <!--
+                <button
+                    id="downloadBtn"
+                    style="display:none;"
+                >
+                    Download Processed File
+                </button>
+                -->
+            </form>
+
+            <div id="status"></div>
+
+        </div>
+
+        <script src="./renderer.js"></script>
+    </body>
+</html>
