@@ -1,6 +1,6 @@
 {
   "name": "check-runs",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "This program simply iterates through all .xlsx files in a given directory and updates all instances of a keyword with an associated definition",
   "homepage": "https://github.com/cba-money/check-runs#readme",
   "bugs": {

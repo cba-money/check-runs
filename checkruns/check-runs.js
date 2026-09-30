@@ -101,13 +101,13 @@ async function startProcessing(checkRegisterPath, runPath) {
     const voidedChecks = [];
     const voidedBases = new Set();
 
-   function styleRow(row, fill) {
-    if (row.number === 1) return;
+    function styleRow(row, fill) {
+      if (row.number === 1) return;
 
-    row.eachCell(cell => {
-      cell.fill = fill;
-    });
-  }
+      row.eachCell(cell => {
+        cell.fill = fill;
+      });
+    }
 
     function getRegisterRowByCheck(checkNumber) {
       for (let rr = 2; rr <= registerWs.rowCount; rr++) {
@@ -162,6 +162,7 @@ async function startProcessing(checkRegisterPath, runPath) {
       }
 
       const matches = [];
+      
       for (let rr = 2; rr <= registerWs.rowCount; rr++) {
         const regRow = registerWs.getRow(rr);
         const regCheck = normalizeValue(regRow.getCell(registerCheckCol).value);
