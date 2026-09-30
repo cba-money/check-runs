@@ -1,16 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
-
-const os = require("os");
 const process = require('process');
-
-function formatDateMDY(date = new Date()) {
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const year = date.getFullYear();
-  return `${month}/${day}/${year}`;
-}
 
 function findColumnByHeader(worksheet, possibleNames) {
   const headerRow = worksheet.getRow(1);
@@ -56,7 +47,7 @@ async function startProcessing(checkRegisterPath, runPath) {
     const registerWs = registerWb.worksheets[0];
     const runWs = runWb.worksheets[0];
 
-    //runWs.spliceRows(1, 1);
+    //Remove top row if its not the header
     const runHeaderRow = detectHeaderRow(runWs);
     if (runHeaderRow === 2) runWs.spliceRows(1, 1);
 
@@ -160,7 +151,6 @@ async function startProcessing(checkRegisterPath, runPath) {
       if (!checkNumber) continue;
 
       if (voidedBases.has(checkNumber)) {
-        //styleRowYellow(runRow);
         styleRow(runRow, blueFill);
         hasDiscrepancy = true;
         discrepancies.push({
@@ -179,13 +169,18 @@ async function startProcessing(checkRegisterPath, runPath) {
       }
 
       /*
+      Doesn't really make sense to have this error condition.
+      The check number may occur more than once on the register,
+      the issue is when it occurs more than once on the run (double/multi cashed check discrepancy)
+
       if (matches.length > 1) {
         throw new Error(`Check number ${checkNumber} appears more than once in the register.`);
       }
       */
 
+
+      // Unknown/Unregistered check cashed discrepancy
       if (matches.length === 0) {
-        //styleRowYellow(runRow);
         styleRow(runRow, blueFill);
         hasDiscrepancy = true;
         discrepancies.push({
@@ -200,8 +195,8 @@ async function startProcessing(checkRegisterPath, runPath) {
       const dateCashed = getDisplayDate(regRow.getCell(registerDateCashedCol).value);
       const regAmount = Number(normalizeValue(regRow.getCell(registerAmountCol).value).replace(/[^0-9.-]/g, ''));
 
+      // Voided check cashed discrepancy
       if (dateCashed === 'VOID') {
-        //styleRowYellow(runRow);
         styleRow(runRow, blueFill);
         hasDiscrepancy = true;
         discrepancies.push({
@@ -214,15 +209,14 @@ async function startProcessing(checkRegisterPath, runPath) {
 
       if (!dateCashed && runAmount === regAmount) {
         const dateCell = regRow.getCell(registerDateCashedCol);
-        //dateCell.value = formatDateMDY();
         const runDate = runRow.getCell(runDateCol).value;
         dateCell.value = runDate;
         dateCell.alignment = { horizontal: 'right' };
         dateCell.font = normalFont;
       }
 
+      // Double/Triple/N (N>1) times cashed discrepancy
       if (dateCashed && dateCashed !== 'VOID') {
-        //styleRowYellow(runRow);
         hasDiscrepancy = true;
         styleRow(runRow, blueFill);
         discrepancies.push({
@@ -232,8 +226,8 @@ async function startProcessing(checkRegisterPath, runPath) {
         });
       }
 
+      // Amount mismatch discrepancy
       if (!Number.isNaN(runAmount) && !Number.isNaN(regAmount) && runAmount !== regAmount) {
-        //styleRowYellow(runRow);
         hasDiscrepancy = true;
         styleRow(runRow, blueFill);
         discrepancies.push({
@@ -249,66 +243,48 @@ async function startProcessing(checkRegisterPath, runPath) {
 
     }
 
-    //const modifiedRunPath = path.join('/tmp/exports', `modified-check-run-${Date.now()}.xlsx`);
-
-    //const discrepanciesPath = path.join('/tmp/exports', `discrepancies-${Date.now()}.xlsx`);
-    //const modifiedRegisterPath = path.join('/tmp/exports', `modified-check-register-${Date.now()}.xlsx`);
-
-    //await runWb.xlsx.writeFile(modifiedRunPath);
-
     const discWb = new ExcelJS.Workbook();
     const discWs = discWb.addWorksheet('Discrepancies');
+
     discWs.columns = [
       { header: 'Row', key: 'row', width: 10 },
       { header: 'Check Number', key: 'checkNumber', width: 20 },
       { header: 'Issue', key: 'issue', width: 60 }
     ];
+
     discWs.addRows(discrepancies);
-    //await discWb.xlsx.writeFile(discrepanciesPath);
-    //await registerWb.xlsx.writeFile(modifiedRegisterPath);
-    await runWb.xlsx.writeFile(
-        path.join(process.cwd(), 'exports', `modified-check-run-${Date.now()}.xlsx`)
-    );
-    await discWb.xlsx.writeFile(
-        path.join(process.cwd(), 'exports', `discrepancies-${Date.now()}.xlsx`)
-    );
-    await registerWb.xlsx.writeFile(
-        path.join(process.cwd(), 'exports', `modified-check-register-${Date.now()}.xlsx`)
+
+    const exportDir = path.join(process.cwd(), 'exports');
+
+    if (!fs.existsSync(exportDir)) {
+      fs.mkdirSync(exportDir, { recursive: true });
+    }
+
+    const timestamp = Date.now();
+
+    const modifiedRunPath = path.join(
+      exportDir,
+      `modified-check-run-${timestamp}.xlsx`
     );
 
-    /*
-    res.send(`
-      <!DOCTYPE HTML>
-      <html lang="en" dir="ltr">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>Processing Complete | CBA Utils | Check Runs App</title>
-          <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
-          <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-          <link rel="shortcut icon" href="/favicon.ico" />
-          <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-          <meta name="apple-mobile-web-app-title" content="CBA Utils" />
-          <link rel="manifest" href="/manifest.json" />
-        </head>
-        <body>
-          <h1>Processing Complete</h1>
-          <p>Modified check run: <a href="/download?file=${encodeURIComponent(modifiedRunPath)}">Download</a></p>
-          <p>Modified check register: <a href="/download?file=${encodeURIComponent(modifiedRegisterPath)}">Download</a></p>
-          <p>Discrepancies file: <a href="/download?file=${encodeURIComponent(discrepanciesPath)}">Download</a></p>
-          <h2>Discrepancies</h2>
-          <ul>
-            ${discrepancies.map(d => `<li>Row ${d.row}, Check ${d.checkNumber}: ${d.issue}</li>`).join('')}
-          </ul>
-        </body>
-      </html>
-    `);
-    */
+    const discrepanciesPath = path.join(
+      exportDir,
+      `discrepancies-${timestamp}.xlsx`
+    );
+
+    const modifiedRegisterPath = path.join(
+      exportDir,
+      `modified-check-register-${timestamp}.xlsx`
+    );
+
+    await runWb.xlsx.writeFile(modifiedRunPath);
+    await discWb.xlsx.writeFile(discrepanciesPath);
+    await registerWb.xlsx.writeFile(modifiedRegisterPath);
+
   } catch (err) {
     console.log(`error: ${err}`);
     return false;
   }
 }
-
 
 module.exports = startProcessing;
