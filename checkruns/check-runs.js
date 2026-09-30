@@ -69,9 +69,9 @@ async function startProcessing(checkRegisterPath, runPath) {
       registerWs.getRow(1).getCell(registerDateCashedCol).value = 'Date Cashed?';
     }
 
-    const runCheckCol = findColumnByHeader(runWs, ['Check #', 'Check Number', 'Cust. Ref. / Check Number']);
+    const runCheckCol = findColumnByHeader(runWs, ['Check #', 'Check Number', 'Cust. Ref. / Check Number', 'Check']);
     const runAmountCol = findColumnByHeader(runWs, ['Debit', 'Amount']);
-    const runDateCol = findColumnByHeader(runWs, ['Date', 'Check Date', 'Date Cashed']);
+    const runDateCol = findColumnByHeader(runWs, ['Date', 'Check Date', 'Date Cashed', 'Post Date']);
 
     if ([registerCheckCol, registerDateCashedCol, registerAmountCol, runCheckCol, runAmountCol].includes(-1)) {
       throw new Error('One or more required headers were not found.');
@@ -178,9 +178,11 @@ async function startProcessing(checkRegisterPath, runPath) {
         if (regCheck === checkNumber) matches.push(regRow);
       }
 
+      /*
       if (matches.length > 1) {
         throw new Error(`Check number ${checkNumber} appears more than once in the register.`);
       }
+      */
 
       if (matches.length === 0) {
         //styleRowYellow(runRow);
@@ -303,7 +305,7 @@ async function startProcessing(checkRegisterPath, runPath) {
     `);
     */
   } catch (err) {
-    console.log("error");
+    console.log(`error: ${err}`);
     return false;
   }
 }
