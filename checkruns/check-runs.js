@@ -2,6 +2,9 @@ const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 
+const os = require("os");
+const process = require('process');
+
 function formatDateMDY(date = new Date()) {
   const month = date.getMonth() + 1;
   const day = date.getDate();
@@ -43,14 +46,11 @@ function getDisplayDate(value) {
 }
 
 async function startProcessing(checkRegisterPath, runPath) {
-    try {
-    const registerPath = checkRegisterPath;
-    const runPath = runPath;
-
+  try {
     const registerWb = new ExcelJS.Workbook();
     const runWb = new ExcelJS.Workbook();
 
-    await registerWb.xlsx.readFile(registerPath);
+    await registerWb.xlsx.readFile(checkRegisterPath);
     await runWb.xlsx.readFile(runPath);
 
     const registerWs = registerWb.worksheets[0];
@@ -247,11 +247,12 @@ async function startProcessing(checkRegisterPath, runPath) {
 
     }
 
-    const modifiedRunPath = path.join('/tmp/exports', `modified-check-run-${Date.now()}.xlsx`);
-    const discrepanciesPath = path.join('/tmp/exports', `discrepancies-${Date.now()}.xlsx`);
-    const modifiedRegisterPath = path.join('/tmp/exports', `modified-check-register-${Date.now()}.xlsx`);
+    //const modifiedRunPath = path.join('/tmp/exports', `modified-check-run-${Date.now()}.xlsx`);
 
-    await runWb.xlsx.writeFile(modifiedRunPath);
+    //const discrepanciesPath = path.join('/tmp/exports', `discrepancies-${Date.now()}.xlsx`);
+    //const modifiedRegisterPath = path.join('/tmp/exports', `modified-check-register-${Date.now()}.xlsx`);
+
+    //await runWb.xlsx.writeFile(modifiedRunPath);
 
     const discWb = new ExcelJS.Workbook();
     const discWs = discWb.addWorksheet('Discrepancies');
@@ -261,9 +262,19 @@ async function startProcessing(checkRegisterPath, runPath) {
       { header: 'Issue', key: 'issue', width: 60 }
     ];
     discWs.addRows(discrepancies);
-    await discWb.xlsx.writeFile(discrepanciesPath);
-    await registerWb.xlsx.writeFile(modifiedRegisterPath);
+    //await discWb.xlsx.writeFile(discrepanciesPath);
+    //await registerWb.xlsx.writeFile(modifiedRegisterPath);
+    await runWb.xlsx.writeFile(
+        path.join(process.cwd(), 'exports', `modified-check-run-${Date.now()}.xlsx`)
+    );
+    await discWb.xlsx.writeFile(
+        path.join(process.cwd(), 'exports', `discrepancies-${Date.now()}.xlsx`)
+    );
+    await registerWb.xlsx.writeFile(
+        path.join(process.cwd(), 'exports', `modified-check-register-${Date.now()}.xlsx`)
+    );
 
+    /*
     res.send(`
       <!DOCTYPE HTML>
       <html lang="en" dir="ltr">
@@ -290,7 +301,9 @@ async function startProcessing(checkRegisterPath, runPath) {
         </body>
       </html>
     `);
+    */
   } catch (err) {
+    console.log("error");
     return false;
   }
 }

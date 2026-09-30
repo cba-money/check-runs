@@ -53,9 +53,9 @@ document
     //document.getElementById('downloadBtn').style.display = "inline-block";
   });
 
-/*
+  /*
 document
-  .getElementById('downloadBtn')
+  .getElementById('downloadRegisterBtn')
   .addEventListener('click', async () => {
     await window.electronAPI.saveOutput(
       generatedFile

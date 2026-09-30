@@ -60,3 +60,5 @@ spec/fixtures/logo.png
 
 test/*
 test_data/*
+
+exports/*

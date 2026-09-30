@@ -3,7 +3,7 @@ const path = require("path");
 
 const isDev = require("./util").isDev;
 
-const { startProcess } = require("./checkruns/check-runs");
+const startProcessing = require("./checkruns/check-runs");
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -63,7 +63,8 @@ ipcMain.handle("upload-file", async (_) => {
 
 
 ipcMain.handle("process-file", async (_, data) => {
-  const output = await startProcess(data.registerFilePath, data.runFilePath);
+  console.log(`Register: ${data.registerFilePath}, ${data.runFilePath}`);
+  const output = await startProcessing(data.registerFilePath, data.runFilePath);
   return output;
 });
 
