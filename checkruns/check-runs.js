@@ -208,12 +208,28 @@ async function startProcessing(checkRegisterPath, runPath) {
         continue;
       }
 
+      /*
       if (!dateCashed && runAmount === regAmount) {
         const dateCell = regRow.getCell(registerDateCashedCol);
         const runDate = runRow.getCell(runDateCol).value;
         dateCell.value = runDate;
         dateCell.alignment = { horizontal: 'right' };
         dateCell.font = normalFont;
+      }
+      */
+     if (!dateCashed) {
+        const dateCell = regRow.getCell(registerDateCashedCol);
+        const runDate = runRow.getCell(runDateCol).value;
+
+        // Record the cashing date regardless of amount mismatch
+        dateCell.value = runDate;
+        dateCell.alignment = { horizontal: 'right' };
+        dateCell.font = normalFont;
+
+        // Only consider it a normal match if the amounts also match
+        if (runAmount === regAmount) {
+          // No discrepancy
+        }
       }
 
       // Double/Triple/N (N>1) times cashed discrepancy
