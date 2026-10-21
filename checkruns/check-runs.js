@@ -125,6 +125,15 @@ async function startProcessing(checkRegisterPath, runPath) {
       if (!regCheck || !regCheck.endsWith('V')) continue;
 
       if (regCheck.endsWith('V')) {
+        const voidRow = getRegisterRowByCheck(regCheck);
+        const voidCell = voidRow.getCell(registerDateCashedCol);
+        voidCell.value = "VOID";
+        voidCell.alignment = { horizontal: 'right' };
+        voidCell.font = {
+          bold: true,
+          color: { argb: 'FFFF0000' }
+        };
+
         const baseCheck = regCheck.slice(0, -1);
         voidedChecks.push(regCheck);
         voidedBases.add(baseCheck);
