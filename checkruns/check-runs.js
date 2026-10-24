@@ -1,7 +1,12 @@
 const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
-const process = require('process');
+
+const { generateLogHeader, generateLogBody, generateLogFooter } = require('./logs.js');
+
+function fileExists(filePath) {
+  return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+}
 
 function findColumnByHeader(worksheet, possibleNames) {
   const headerRow = worksheet.getRow(1);
@@ -36,280 +41,354 @@ function getDisplayDate(value) {
   return String(value).trim();
 }
 
-async function startProcessing(checkRegisterPath, runPath) {
-  try {
-    const registerWb = new ExcelJS.Workbook();
-    const runWb = new ExcelJS.Workbook();
+function generateLogs(logs, startTime, endTime, exitCode, exitStatus) {
+  const header = generateLogHeader({
+    appName: 'Check Runs Desktop',
+    appVersion: '2.4.1',
+    environment: 'Production',
+    logLevel: 'DEBUG',
+    commandArgs: 'node server.js --port=8080'
+  });
 
-    await registerWb.xlsx.readFile(checkRegisterPath);
-    await runWb.xlsx.readFile(runPath);
+  const logBody = generateLogBody(logs);
 
-    const registerWs = registerWb.worksheets[0];
-    const runWs = runWb.worksheets[0];
+  const recordsProcessed = logs.length;
+  const recordsSucceeded = logs.filter(log => log.level === 'SUCCESS').length;
+  const recordsFailed = logs.filter(log => log.level === 'ERROR').length;
 
-    //Remove top row if its not the header
-    const runHeaderRow = detectHeaderRow(runWs);
-    if (runHeaderRow === 2) runWs.spliceRows(1, 1);
+  const footer = generateLogFooter({
+    startTime: startTime,
+    endTime: endTime,
+    records: {
+      processed: recordsProcessed,
+      succeeded: recordsSucceeded,
+      failed: recordsFailed
+    },
+    logSummary: {
+      info: logs.filter(log => log.level === 'INFO').length,
+      warn: logs.filter(log => log.level === 'WARN').length,
+      error: logs.filter(log => log.level === 'ERROR').length
+    },
+    exitCode: 0,
+    exitStatus: '0 (SUCCESS_WITH_WARNINGS)'
+  });
 
-    const registerCheckCol = findColumnByHeader(registerWs, ['Check #', 'Check Number']);
-    let registerDateCashedCol = findColumnByHeader(registerWs, ['Date Cashed?', 'Date Cashed']);
-    const registerAmountCol = findColumnByHeader(registerWs, ['Amount', 'Check Amount']);
+  return [header, logBody, footer].join('\n');
+}
 
-    if (registerDateCashedCol === -1) {
-      registerDateCashedCol = registerWs.columnCount + 1;
-      registerWs.getRow(1).getCell(registerDateCashedCol).value = 'Date Cashed?';
-    }
+async function startProcessing(checkRegisterPath, runPath, outputPath, saveLogs) {
+  const startTime = new Date(Date.now());
+  let logs = [{
+    message: `Starting processing with Register: ${checkRegisterPath}, Run: ${runPath}, Output Path: ${outputPath}, Save Logs: ${saveLogs}`,
+    level: 'INFO',
+    timestamp: new Date().toISOString()
+  }];
+  const registerFileExists = fileExists(checkRegisterPath);
+  const runFileExists = fileExists(runPath);
+  const outputDirExists = fs.existsSync(outputPath) && fs.statSync(outputPath).isDirectory();
 
-    const runCheckCol = findColumnByHeader(runWs, ['Check #', 'Check Number', 'Cust. Ref. / Check Number', 'Check']);
-    const runAmountCol = findColumnByHeader(runWs, ['Debit', 'Amount']);
-    const runDateCol = findColumnByHeader(runWs, ['Date', 'Check Date', 'Date Cashed', 'Post Date']);
+  if (!registerFileExists || !runFileExists) {
+    logs.push({
+      message: 'One or more specified files do not exist.',
+      level: 'ERROR',
+      timestamp: new Date().toISOString()
+    });
+    throw new Error('One or more specified files do not exist.');
+  }
 
-    if ([registerCheckCol, registerDateCashedCol, registerAmountCol, runCheckCol, runAmountCol].includes(-1)) {
-      throw new Error('One or more required headers were not found.');
-    }
+  if(!outputDirExists) {
+    logs.push({
+      message: 'The specified output path is not a valid directory.',
+      level: 'ERROR',
+      timestamp: new Date().toISOString()
+    });
+    throw new Error('The specified output path is not a valid directory.');
+  }
 
-    const discrepancies = [];
+  const registerWb = new ExcelJS.Workbook();
+  const runWb = new ExcelJS.Workbook();
 
-    const normalFont = {
-      bold: false,
-      color: { argb: 'FF000000' }
-    };
+  await registerWb.xlsx.readFile(checkRegisterPath);
+  await runWb.xlsx.readFile(runPath);
+  logs.push({
+    message: 'Successfully read both Excel files.',
+    level: 'INFO',
+    timestamp: new Date().toISOString()
+  });
 
-    const yellowFill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFFFFF00' }
-    };
+  const registerWs = registerWb.worksheets[0];
+  const runWs = runWb.worksheets[0];
 
-    const blueFill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFADD8E6' }
-    };
+  //Remove top row if its not the header
+  const runHeaderRow = detectHeaderRow(runWs);
+  if (runHeaderRow === 2) runWs.spliceRows(1, 1);
 
-    const voidFill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFFFFF00' }
-    };
+  const registerCheckCol = findColumnByHeader(registerWs, ['Check #', 'Check Number']);
+  let registerDateCashedCol = findColumnByHeader(registerWs, ['Date Cashed?', 'Date Cashed']);
+  const registerAmountCol = findColumnByHeader(registerWs, ['Amount', 'Check Amount']);
 
-    const voidFont = {
-      bold: true,
-      color: { argb: 'FFFF0000' }
-    };
+  if (registerDateCashedCol === -1) {
+    registerDateCashedCol = registerWs.columnCount + 1;
+    registerWs.getRow(1).getCell(registerDateCashedCol).value = 'Date Cashed?';
+  }
 
-    const voidedChecks = [];
-    const voidedBases = new Set();
+  const runCheckCol = findColumnByHeader(runWs, ['Check #', 'Check Number', 'Cust. Ref. / Check Number', 'Check']);
+  const runAmountCol = findColumnByHeader(runWs, ['Debit', 'Amount']);
+  const runDateCol = findColumnByHeader(runWs, ['Date', 'Check Date', 'Date Cashed', 'Post Date']);
 
-    function styleRow(row, fill) {
-      if (row.number === 1) return;
+  if ([registerCheckCol, registerDateCashedCol, registerAmountCol, runCheckCol, runAmountCol].includes(-1)) {
+    logs.push({
+      message: 'One or more required headers were not found in the Excel files.',
+      level: 'ERROR',
+      timestamp: new Date().toISOString()
+    });
+    throw new Error('One or more required headers were not found.');
+  }
 
-      row.eachCell(cell => {
-        cell.fill = fill;
-      });
-    }
+  logs.push({
+    message: 'All required headers found.',
+    level: 'INFO',
+    timestamp: new Date().toISOString()
+  });
 
-    function getRegisterRowByCheck(checkNumber) {
-      for (let rr = 2; rr <= registerWs.rowCount; rr++) {
-        const regRow = registerWs.getRow(rr);
-        const regCheck = normalizeValue(regRow.getCell(registerCheckCol).value);
-        if (regCheck === checkNumber) return regRow;
-      }
-      return null;
-    }
+  const discrepancies = [];
 
+  const normalFont = {
+    bold: false,
+    color: { argb: 'FF000000' }
+  };
+
+  const yellowFill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFFFF00' }
+  };
+
+  const blueFill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFADD8E6' }
+  };
+
+  const voidFill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFFFF00' }
+  };
+
+  const voidFont = {
+    bold: true,
+    color: { argb: 'FFFF0000' }
+  };
+
+  const voidedChecks = [];
+  const voidedBases = new Set();
+
+  function styleRow(row, fill) {
+    if (row.number === 1) return;
+
+    row.eachCell(cell => {
+      cell.fill = fill;
+    });
+  }
+
+  function getRegisterRowByCheck(checkNumber) {
     for (let rr = 2; rr <= registerWs.rowCount; rr++) {
       const regRow = registerWs.getRow(rr);
       const regCheck = normalizeValue(regRow.getCell(registerCheckCol).value);
+      if (regCheck === checkNumber) return regRow;
+    }
+    return null;
+  }
 
-      if (!regCheck || !regCheck.endsWith('V')) continue;
+  for (let rr = 2; rr <= registerWs.rowCount; rr++) {
+    const regRow = registerWs.getRow(rr);
+    const regCheck = normalizeValue(regRow.getCell(registerCheckCol).value);
 
-      if (regCheck.endsWith('V')) {
-        const voidRow = getRegisterRowByCheck(regCheck);
-        const voidCell = voidRow.getCell(registerDateCashedCol);
-        voidCell.value = "VOID";
-        voidCell.alignment = { horizontal: 'right' };
-        voidCell.font = {
-          bold: true,
-          color: { argb: 'FFFF0000' }
-        };
+    if (!regCheck || !regCheck.endsWith('V')) continue;
 
-        const baseCheck = regCheck.slice(0, -1);
-        voidedChecks.push(regCheck);
-        voidedBases.add(baseCheck);
+    if (regCheck.endsWith('V')) {
+      const voidRow = getRegisterRowByCheck(regCheck);
+      const voidCell = voidRow.getCell(registerDateCashedCol);
+      voidCell.value = "VOID";
+      voidCell.alignment = { horizontal: 'right' };
+      voidCell.font = {
+        bold: true,
+        color: { argb: 'FFFF0000' }
+      };
 
-        const duplicateRow = getRegisterRowByCheck(baseCheck);
-        if (!duplicateRow) continue;
+      const baseCheck = regCheck.slice(0, -1);
+      voidedChecks.push(regCheck);
+      voidedBases.add(baseCheck);
 
-        const dateCell = duplicateRow.getCell(registerDateCashedCol);
-        dateCell.value = 'VOID';
-        dateCell.alignment = { horizontal: 'right' };
-        dateCell.font = {
-          bold: true,
-          color: { argb: 'FFFF0000' }
-        };
+      const duplicateRow = getRegisterRowByCheck(baseCheck);
+      if (!duplicateRow) continue;
+
+      const dateCell = duplicateRow.getCell(registerDateCashedCol);
+      dateCell.value = 'VOID';
+      dateCell.alignment = { horizontal: 'right' };
+      dateCell.font = {
+        bold: true,
+        color: { argb: 'FFFF0000' }
+      };
+
+      logs.push({
+        message: `Voided check detected: ${regCheck}. Marked both ${regCheck} and ${baseCheck} as VOID.`,
+        level: 'INFO',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  for (let r = 2; r <= runWs.rowCount; r++) {
+    const runRow = runWs.getRow(r);
+    let hasDiscrepancy = false;
+    const checkNumber = normalizeValue(runRow.getCell(runCheckCol).value);
+    const runAmount = Number(normalizeValue(runRow.getCell(runAmountCol).value).replace(/[^0-9.-]/g, ''));
+
+    if (!checkNumber) continue;
+
+    if (voidedBases.has(checkNumber)) {
+      styleRow(runRow, blueFill);
+      hasDiscrepancy = true;
+      discrepancies.push({
+        checkNumber,
+        issue: 'Voided check appears in check run',
+        row: r
+      });
+      continue;
+    }
+
+    const matches = [];
+    
+    for (let rr = 2; rr <= registerWs.rowCount; rr++) {
+      const regRow = registerWs.getRow(rr);
+      const regCheck = normalizeValue(regRow.getCell(registerCheckCol).value);
+      if (regCheck === checkNumber) matches.push(regRow);
+    }
+
+    // Unknown/Unregistered check cashed discrepancy
+    if (matches.length === 0) {
+      styleRow(runRow, blueFill);
+      hasDiscrepancy = true;
+      discrepancies.push({
+        checkNumber,
+        issue: 'Not found in register',
+        row: r
+      });
+      continue;
+    }
+
+    const regRow = matches[0];
+    const dateCashed = getDisplayDate(regRow.getCell(registerDateCashedCol).value);
+    const regAmount = Number(normalizeValue(regRow.getCell(registerAmountCol).value).replace(/[^0-9.-]/g, ''));
+
+    // Voided check cashed discrepancy
+    if (dateCashed === 'VOID') {
+      styleRow(runRow, blueFill);
+      hasDiscrepancy = true;
+      discrepancies.push({
+        checkNumber,
+        issue: 'Voided check appears in check run',
+        row: r
+      });
+      continue;
+    }
+
+    if (!dateCashed) {
+      const dateCell = regRow.getCell(registerDateCashedCol);
+      const runDate = runRow.getCell(runDateCol).value;
+
+      // Record the cashing date regardless of amount mismatch
+      dateCell.value = runDate;
+      dateCell.alignment = { horizontal: 'right' };
+      dateCell.font = normalFont;
+
+      // Only consider it a normal match if the amounts also match
+      if (runAmount === regAmount) {
+        // No discrepancy
       }
     }
 
-    for (let r = 2; r <= runWs.rowCount; r++) {
-      const runRow = runWs.getRow(r);
-      let hasDiscrepancy = false;
-      const checkNumber = normalizeValue(runRow.getCell(runCheckCol).value);
-      const runAmount = Number(normalizeValue(runRow.getCell(runAmountCol).value).replace(/[^0-9.-]/g, ''));
-
-      if (!checkNumber) continue;
-
-      if (voidedBases.has(checkNumber)) {
-        styleRow(runRow, blueFill);
-        hasDiscrepancy = true;
-        discrepancies.push({
-          checkNumber,
-          issue: 'Voided check appears in check run',
-          row: r
-        });
-        continue;
-      }
-
-      const matches = [];
-      
-      for (let rr = 2; rr <= registerWs.rowCount; rr++) {
-        const regRow = registerWs.getRow(rr);
-        const regCheck = normalizeValue(regRow.getCell(registerCheckCol).value);
-        if (regCheck === checkNumber) matches.push(regRow);
-      }
-
-      /*
-      Doesn't really make sense to have this error condition.
-      The check number may occur more than once on the register,
-      the issue is when it occurs more than once on the run (double/multi cashed check discrepancy)
-
-      if (matches.length > 1) {
-        throw new Error(`Check number ${checkNumber} appears more than once in the register.`);
-      }
-      */
-
-
-      // Unknown/Unregistered check cashed discrepancy
-      if (matches.length === 0) {
-        styleRow(runRow, blueFill);
-        hasDiscrepancy = true;
-        discrepancies.push({
-          checkNumber,
-          issue: 'Not found in register',
-          row: r
-        });
-        continue;
-      }
-
-      const regRow = matches[0];
-      const dateCashed = getDisplayDate(regRow.getCell(registerDateCashedCol).value);
-      const regAmount = Number(normalizeValue(regRow.getCell(registerAmountCol).value).replace(/[^0-9.-]/g, ''));
-
-      // Voided check cashed discrepancy
-      if (dateCashed === 'VOID') {
-        styleRow(runRow, blueFill);
-        hasDiscrepancy = true;
-        discrepancies.push({
-          checkNumber,
-          issue: 'Voided check appears in check run',
-          row: r
-        });
-        continue;
-      }
-
-      /*
-      if (!dateCashed && runAmount === regAmount) {
-        const dateCell = regRow.getCell(registerDateCashedCol);
-        const runDate = runRow.getCell(runDateCol).value;
-        dateCell.value = runDate;
-        dateCell.alignment = { horizontal: 'right' };
-        dateCell.font = normalFont;
-      }
-      */
-     if (!dateCashed) {
-        const dateCell = regRow.getCell(registerDateCashedCol);
-        const runDate = runRow.getCell(runDateCol).value;
-
-        // Record the cashing date regardless of amount mismatch
-        dateCell.value = runDate;
-        dateCell.alignment = { horizontal: 'right' };
-        dateCell.font = normalFont;
-
-        // Only consider it a normal match if the amounts also match
-        if (runAmount === regAmount) {
-          // No discrepancy
-        }
-      }
-
-      // Double/Triple/N (N>1) times cashed discrepancy
-      if (dateCashed && dateCashed !== 'VOID') {
-        hasDiscrepancy = true;
-        styleRow(runRow, blueFill);
-        discrepancies.push({
-          checkNumber,
-          issue: `Previously cashed: ${dateCashed}`,
-          row: r
-        });
-      }
-
-      // Amount mismatch discrepancy
-      if (!Number.isNaN(runAmount) && !Number.isNaN(regAmount) && runAmount !== regAmount) {
-        hasDiscrepancy = true;
-        styleRow(runRow, blueFill);
-        discrepancies.push({
-          checkNumber,
-          issue: `Amount mismatch. Run: ${runAmount}, Register: ${regAmount}`,
-          row: r
-        });
-      }
-
-      if (!hasDiscrepancy) {
-        styleRow(runRow, yellowFill);
-      }
-
+    // Double/Triple/N (N>1) times cashed discrepancy
+    if (dateCashed && dateCashed !== 'VOID') {
+      hasDiscrepancy = true;
+      styleRow(runRow, blueFill);
+      discrepancies.push({
+        checkNumber,
+        issue: `Previously cashed: ${dateCashed}`,
+        row: r
+      });
     }
 
-    const discWb = new ExcelJS.Workbook();
-    const discWs = discWb.addWorksheet('Discrepancies');
-
-    discWs.columns = [
-      { header: 'Row', key: 'row', width: 10 },
-      { header: 'Check Number', key: 'checkNumber', width: 20 },
-      { header: 'Issue', key: 'issue', width: 60 }
-    ];
-
-    discWs.addRows(discrepancies);
-
-    const exportDir = path.join(process.cwd(), 'exports');
-
-    if (!fs.existsSync(exportDir)) {
-      fs.mkdirSync(exportDir, { recursive: true });
+    // Amount mismatch discrepancy
+    if (!Number.isNaN(runAmount) && !Number.isNaN(regAmount) && runAmount !== regAmount) {
+      hasDiscrepancy = true;
+      styleRow(runRow, blueFill);
+      discrepancies.push({
+        checkNumber,
+        issue: `Amount mismatch. Run: ${runAmount}, Register: ${regAmount}`,
+        row: r
+      });
     }
 
-    const timestamp = Date.now();
+    if (!hasDiscrepancy) {
+      styleRow(runRow, yellowFill);
+    }
 
-    const modifiedRunPath = path.join(
-      exportDir,
-      `modified-check-run-${timestamp}.xlsx`
-    );
+  }
 
-    const discrepanciesPath = path.join(
-      exportDir,
-      `discrepancies-${timestamp}.xlsx`
-    );
+  const discWb = new ExcelJS.Workbook();
+  const discWs = discWb.addWorksheet('Discrepancies');
 
-    const modifiedRegisterPath = path.join(
-      exportDir,
-      `modified-check-register-${timestamp}.xlsx`
-    );
+  discWs.columns = [
+    { header: 'Row', key: 'row', width: 10 },
+    { header: 'Check Number', key: 'checkNumber', width: 20 },
+    { header: 'Issue', key: 'issue', width: 60 }
+  ];
 
-    await runWb.xlsx.writeFile(modifiedRunPath);
-    await discWb.xlsx.writeFile(discrepanciesPath);
-    await registerWb.xlsx.writeFile(modifiedRegisterPath);
+  discWs.addRows(discrepancies);
 
-  } catch (err) {
-    console.log(`error: ${err}`);
-    return false;
+  //const exportDir = path.join(process.cwd(), 'exports');
+  const exportDir = path.join(outputPath);
+
+  if (!fs.existsSync(exportDir)) {
+    fs.mkdirSync(exportDir, { recursive: true });
+  }
+
+  const timestamp = Date.now();
+  const endTime = new Date(Date.now());
+
+  const modifiedRunPath = path.join(
+    exportDir,
+    `modified-check-run-${timestamp}.xlsx`
+  );
+
+  const discrepanciesPath = path.join(
+    exportDir,
+    `discrepancies-${timestamp}.xlsx`
+  );
+
+  const modifiedRegisterPath = path.join(
+    exportDir,
+    `modified-check-register-${timestamp}.xlsx`
+  );
+
+  await runWb.xlsx.writeFile(modifiedRunPath);
+  await discWb.xlsx.writeFile(discrepanciesPath);
+  await registerWb.xlsx.writeFile(modifiedRegisterPath);
+
+  logs.push({
+    message: 'Successfully saved all files.',
+    level: 'INFO',
+    timestamp: new Date().toISOString()
+  });
+
+
+  if(saveLogs) {
+    const logFilePath = path.join(exportDir, `processing-log-${timestamp}.txt`);
+    const logContent = generateLogs(logs, startTime, endTime, 0, '0 (SUCCESS)');
+    fs.writeFileSync(logFilePath, logContent);
   }
 }
 

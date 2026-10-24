@@ -8,7 +8,7 @@ const startProcessing = require("./checkruns/check-runs");
 function createWindow() {
   const win = new BrowserWindow({
     width: 700,
-    height: 500,
+    height: 800,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true
@@ -36,7 +36,7 @@ async function selectLocalFile() {
 
   if (!result.canceled) {
     const filePath = result.filePaths[0]; // Contains the full absolute path string
-    console.log('Selected file:', filePath);
+    //console.log('Selected file:', filePath);
     return filePath;
   }
 }
@@ -61,13 +61,15 @@ ipcMain.handle("upload-file", async (_) => {
     return await selectLocalFile();
 });
 
-
-ipcMain.handle("process-file", async (_, data) => {
-  console.log(`Register: ${data.registerFilePath}, ${data.runFilePath}`);
-  const output = await startProcessing(data.registerFilePath, data.runFilePath);
-  return output;
+ipcMain.handle("choose-output-path", async (_) => {
+    return await selectLocalFolder();
 });
 
+ipcMain.handle("process-file", async (_, data) => {
+  //console.log(`Register: ${data.registerFilePath}, Run: ${data.runFilePath}, Output Path: ${data.outputPath}, Save Logs: ${data.saveLogs}`);
+  const output = await startProcessing(data.registerFilePath, data.runFilePath, data.outputPath, data.saveLogs);
+  return output;
+});
 
 ipcMain.handle("save-output", async (_, sourcePath) => {
   const result = await dialog.showSaveDialog({

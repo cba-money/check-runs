@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   saveOutput: (filePath) =>
     ipcRenderer.invoke("save-output", filePath),
-
+  
+  chooseOutputPath: () => ipcRenderer.invoke("choose-output-path"),
   getFilePath: (file) => webUtils.getPathForFile(file)
 });

@@ -12,59 +12,86 @@
                 Check Runs App
             </h1>
 
-            <form>
+            <p id="error-message" class="error-message"></p>
+
+            <form id="checkRunsForm">
                 <fieldset>
                     <legend>Upload Files</legend>
-                    <input 
-                        type="text"
-                        id="uploadedRegisterFilePath"
-                        value="Please select a file..."
-                        readonly
-                        disabled
-                        name="uploadedRegisterFilePath"
-                    />
-
-                    <input 
-                        type="text"
-                        id="uploadedRunFilePath"
-                        value="Please select a file..."
-                        readonly
-                        disabled
-                        name="uploadedRunFilePath"
-                    />
-
-                    <input 
-                        type="button"
-                        id="registerFileUpload"
-                        value="Choose Register"
-                    />
-
-                    <input 
-                        type="button"
-                        id="runFileUpload"
-                        value="Choose Run"
-                    />
+                    <div class="register-file-field">
+                        <input 
+                            type="text"
+                            id="uploadedRegisterFilePath"
+                            value="Please select a file..."
+                            readonly
+                            name="uploadedRegisterFilePath"
+                            class="file-path-input"
+                        />
+                        <input 
+                            type="button"
+                            id="registerFileUpload"
+                            value="Choose Register"
+                            class="file-upload-btn"
+                        />
+                    </div>
+                    
+                    <div class="run-file-field">
+                        <input 
+                            type="text"
+                            id="uploadedRunFilePath"
+                            value="Please select a file..."
+                            readonly
+                            name="uploadedRunFilePath"
+                            class="run-file-path-input"
+                        />
+                        <input 
+                            type="button"
+                            id="runFileUpload"
+                            value="Choose Run"
+                            class="file-upload-btn"
+                        />
+                    </div>
                 </fieldset>
 
+                <fieldset>
+                    <legend>Options</legend>
+                    <div class="output-path-field">
+                        <input 
+                            type="text"
+                            id="outputPath"
+                            value="Select output path..."
+                            readonly
+                            name="outputFilePath"
+                            class="output-path-input"
+                        />
+                        <input 
+                            type="button"
+                            id="outputPathUpload"
+                            value="Choose Output Folder"
+                            class="output-path-btn"
+                        />
+                    </div>
+                    <div class="save-logs-field">
+                        <span>
+                            Save Log File?
+                        </span>
+                        <ul class="save-logs-list">
+                            <li style="display:flex">
+                                <input type="radio" id="save-logs-true" name="saveLogs" value="yes" style="display:inline-block">
+                                <label for="save-logs-true">Yes</label>
+                            </li>
+                            <li style="display:flex">
+                                <input type="radio" id="save-logs-false" name="saveLogs" value="no" style="display:inline-block" checked>
+                                <label for="save-logs-false">No</label>
+                            </li>
+                        </ul>
+                    </div>
+                </fieldset>
+                
                 <input 
-                    type="button"
                     value="Start Process"
                     id="submitBtn"
+                    type="submit"
                 />
-                <!--
-                <button id="submitBtn">
-                    Process File
-                </button>
-                -->
-                
-                <!--
-                <button
-                    id="downloadBtn"
-                    style="display:none;"
-                >
-                    Download Processed File
-                </button>
-                -->
             </form>
 
             <div id="status"></div>
